@@ -154,7 +154,7 @@ export function Dashboard() {
   const maxPages = Math.max(1, ...filteredGroups.map(group => Math.ceil(group.stores.filter(store => store.name.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))).length / Number(size))))
   const metrics = [
     { label: 'Lojas', value: fmt(storesCount), note: 'Filiais por bandeira', icon: Building2 },
-    { label: 'Itens', value: fmt(rows.length), note: 'Itens da base automática', icon: FileSpreadsheet },
+    { label: 'Itens + 20%', value: fmt(Math.ceil(rows.length * 1.20)), note: 'Total de itens com acréscimo de 20%', icon: FileSpreadsheet },
     { label: 'Peso total', value: fmt(totalWeight, 2), note: 'Peso informado na base · kg', icon: Weight },
     { label: 'Reposição', value: fmt(totalReplenishment, 2), note: 'Quantidade total de reposição', icon: Package },
     { label: 'Total geral', value: fmt(totalGeneral, 2), note: 'Soma do total · sem valor monetário', icon: Layers },
