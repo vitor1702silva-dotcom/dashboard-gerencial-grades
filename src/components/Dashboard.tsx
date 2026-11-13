@@ -111,6 +111,7 @@ export function Dashboard() {
   const [search, setSearch] = useState('')
   const [size, setSize] = useState('25')
   const [page, setPage] = useState(0)
+  const [presentationMode, setPresentationMode] = useState(false)
   const [lastLoaded, setLastLoaded] = useState<Date | null>(null)
 
   useEffect(() => {
@@ -192,21 +193,110 @@ export function Dashboard() {
       <main id="relatorio"><section className="store-panel" style={{ maxWidth: 460, margin: '48px auto', padding: 28 }}><h2>Acessar relatório</h2><form onSubmit={handleLogin} style={{ display: 'grid', gap: 14, marginTop: 18 }}><label>E-mail<input style={{ display: 'block', width: '100%', padding: 12, marginTop: 6 }} type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} /></label><label>Senha<input style={{ display: 'block', width: '100%', padding: 12, marginTop: 6 }} type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></label><button className="export-button" type="submit" disabled={loggingIn}>{loggingIn ? 'Entrando…' : 'Entrar'}</button></form>{error && <p role="alert" style={{ color: '#b91c1c', marginTop: 14 }}>{error}</p>}</section></main>
     </div>
   )
+  if (presentationMode) return (
+    <div className="grades-summary-view">
+      <style>{`
+        .grades-summary-view { min-height: 100vh; padding: 12px 12px 22px; background: #e9eef5; box-sizing: border-box; color: #122f53; }
+        .grades-summary-view * { box-sizing: border-box; }
+        .grades-summary-toolbar { max-width: 1500px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font: 600 13px Arial,sans-serif; }
+        .grades-summary-toolbar button { border: 0; border-radius: 7px; background: #12335e; color: #fff; padding: 9px 16px; font: inherit; cursor: pointer; }
+        .grades-summary-slide { width: min(96vw, 160vh); max-width: 1500px; aspect-ratio: 16 / 9; margin: 0 auto; overflow: hidden; display: flex; flex-direction: column; background: #f3f6fb; border: 1px solid #d5deeb; box-shadow: 0 5px 20px #142e4c16; container-type: inline-size; font-family: Arial,Helvetica,sans-serif; }
+        .grades-summary-head { height: 18%; flex-shrink: 0; display: flex; align-items: center; gap: 2.2cqw; padding: 1.4cqw 3cqw; background: #112e55; border-bottom: .48cqw solid #d82d43; color: #fff; }
+        .grades-summary-head img { width: 10cqw; height: 6.5cqw; object-fit: contain; background: #fff; border-radius: .6cqw; padding: .35cqw; }
+        .grades-summary-head h1 { margin: .35cqw 0; color: #fff; font-size: 2.25cqw; line-height: 1.15; }
+        .grades-summary-head p { margin: 0; color: #d4e0f0; font-size: 1.15cqw; }
+        .grades-summary-eyebrow { font-size: .92cqw; color: #c0d1e7; letter-spacing: .12em; font-weight: 700; }
+        .grades-summary-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 2cqw 2.6cqw 1.3cqw; gap: 1.7cqw; }
+        .grades-summary-kpis { display: grid; grid-template-columns: .8fr 1fr 1.15fr 1.65fr; gap: 1.2cqw; }
+        .grades-summary-kpi { background: #fff; border: 1px solid #d6e0ec; border-radius: .85cqw; padding: 1.4cqw; min-width: 0; }
+        .grades-summary-kpi span { display: block; font-size: 1.12cqw; color: #526b89; margin-bottom: .65cqw; }
+        .grades-summary-kpi strong { color: #102f58; font-size: 2.25cqw; white-space: nowrap; letter-spacing: -.04em; }
+        .grades-summary-kpi:last-child strong { font-size: 1.95cqw; }
+        .grades-summary-section { display: flex; justify-content: space-between; align-items: baseline; }
+        .grades-summary-section h2 { margin: 0; font-size: 1.8cqw; color: #102f58; }
+        .grades-summary-section span { font-size: 1.1cqw; color: #647993; }
+        .grades-summary-table-wrap { background: #fff; border: 1px solid #d6e0ec; border-radius: .85cqw; overflow: hidden; flex: 1; min-height: 0; }
+        .grades-summary-table { border-collapse: collapse; width: 100%; height: 100%; table-layout: fixed; font-size: 1.28cqw; }
+        .grades-summary-table th,.grades-summary-table td { padding: 1.1cqw 1.3cqw; border-bottom: 1px solid #e5ebf3; }
+        .grades-summary-table thead { background: #e8eef6; color: #3b5574; }
+        .grades-summary-table th { text-align: left; }
+        .grades-summary-table th:not(:first-child),.grades-summary-table td:not(:first-child) { text-align: right; white-space: nowrap; }
+        .grades-summary-table tbody tr:nth-child(even) { background: #f7f9fc; }
+        .grades-summary-table tbody td:first-child { font-weight: 700; }
+        .grades-summary-table tfoot { background: #112e55; color: #fff; font-weight: 700; }
+        .grades-summary-table tfoot td { border-bottom: 0; }
+        .grades-summary-foot { flex-shrink: 0; padding: .95cqw 2.6cqw; display: flex; justify-content: space-between; background: #e1eaf4; font-size: 1.03cqw; color: #526b89; }
+        @media print { @page { size: landscape; margin: 0; } .grades-summary-toolbar { display: none !important; } .grades-summary-view { padding: 0; background: white; } .grades-summary-slide { width: 100vw; border: 0; box-shadow: none; } }
+      `}</style>
+      <div className="grades-summary-toolbar">
+        <span>Resumo gerencial · 16:9 · um único print</span>
+        <button type="button" onClick={() => setPresentationMode(false)}>Voltar ao dashboard</button>
+      </div>
+      <div className="grades-summary-slide" aria-label="Resumo gerencial para apresentação 16 por 9">
+        <header className="grades-summary-head">
+          <img src="/images/grupo-mateus.png" alt="Grupo Mateus" />
+          <div><div className="grades-summary-eyebrow">RELATÓRIO GERENCIAL · GERAÇÃO DE GRADES</div><h1>{title}</h1><p>Resumo consolidado por bandeira · Centro de Distribuição</p></div>
+        </header>
+        <div className="grades-summary-body">
+          <div className="grades-summary-kpis">
+            <div className="grades-summary-kpi"><span>Lojas</span><strong>{fmt(storesCount)}</strong></div>
+            <div className="grades-summary-kpi"><span>Itens + 20%</span><strong>{fmt(Math.ceil(rows.length * 1.20))}</strong></div>
+            <div className="grades-summary-kpi"><span>Peso total · kg</span><strong>{fmt(totalWeight, 2)}</strong></div>
+            <div className="grades-summary-kpi"><span>Valor total</span><strong>{fmtAccounting(totalGeneral)}</strong></div>
+          </div>
+          <div className="grades-summary-section"><h2>Consolidado por bandeira</h2><span>{groups.length} bandeiras · {storesCount} lojas</span></div>
+          <div className="grades-summary-table-wrap">
+            <table className="grades-summary-table">
+              <colgroup><col style={{width:'27%'}}/><col style={{width:'11%'}}/><col style={{width:'13%'}}/><col style={{width:'21%'}}/><col style={{width:'28%'}}/></colgroup>
+              <thead><tr><th scope="col">Bandeira</th><th scope="col">Lojas</th><th scope="col">Itens (base)</th><th scope="col">Peso kg</th><th scope="col">Valor</th></tr></thead>
+              <tbody>{groups.map(group => <tr key={group.name}><td>{group.name}</td><td>{fmt(group.stores.length)}</td><td>{fmt(group.records)}</td><td>{fmt(group.weight,2)}</td><td>{fmtAccounting(group.total)}</td></tr>)}</tbody>
+              <tfoot><tr><td>Total geral</td><td>{fmt(storesCount)}</td><td>{fmt(rows.length)}</td><td>{fmt(totalWeight,2)}</td><td>{fmtAccounting(totalGeneral)}</td></tr></tfoot>
+            </table>
+          </div>
+        </div>
+        <footer className="grades-summary-foot"><span>Fonte: Supabase · Itens do quadro por bandeira sem acréscimo · Valores em R$</span><span>{lastLoaded ? `Consultado em ${lastLoaded.toLocaleString('pt-BR')}` : 'Aguardando atualização'}</span></footer>
+      </div>
+    </div>
+  )
+
   return (
     <div className="presentation">
       <a className="skip-link" href="#relatorio">Pular para o relatório</a>
       <header className="report-masthead"><div className="masthead-inner"><div className="logo-box"><img src="/images/grupo-mateus.png" alt="Grupo Mateus" width="153" height="102" /></div><div className="masthead-title"><span className="overline">RELATÓRIO GERENCIAL · GERAÇÃO DE GRADES</span><h1>{title}</h1><p>Planejamento de reposição · visão por bandeira e loja</p></div><div className="extraction"><span>ÚLTIMA ATUALIZAÇÃO DA TELA</span><strong>{lastLoaded ? lastLoaded.toLocaleDateString('pt-BR') : '—'}</strong><small>{lastLoaded ? lastLoaded.toLocaleTimeString('pt-BR') : 'Aguardando dados'}</small></div></div></header>
       <main id="relatorio">
-        <div className="cycle-row"><div className="cycle"><strong>Base</strong><span>{loading ? 'Carregando…' : 'Última sincronização concluída'}</span></div><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><button className="export-button" onClick={refresh} disabled={loading}><RefreshCw size={16} />Atualizar dados</button><button className="export-button" onClick={logout}><LogOut size={16} />Sair</button></div></div>
+        <div className="cycle-row"><div className="cycle"><strong>Base</strong><span>{loading ? 'Carregando…' : 'Última sincronização concluída'}</span></div><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><button className="export-button" onClick={() => setPresentationMode(true)} disabled={loading || !rows.length}>Resumo 16:9 para print</button><button className="export-button" onClick={refresh} disabled={loading}><RefreshCw size={16} />Atualizar dados</button><button className="export-button" onClick={logout}><LogOut size={16} />Sair</button></div></div>
         <style>{`
-          .metrics.metrics-wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr); }
+          .metrics.metrics-wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr); }
           .metrics.metrics-wide .metric { min-width: 0; }
           .metrics.metrics-wide .metric-value { white-space: nowrap; }
+          .metrics.metrics-wide .metric:last-child .metric-value { font-size: clamp(1.25rem, 2.1vw, 1.85rem); letter-spacing: -0.035em; }
           @media (max-width: 1000px) {
             .metrics.metrics-wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           }
           @media (max-width: 560px) {
             .metrics.metrics-wide { grid-template-columns: minmax(0, 1fr); }
+          }
+        `}</style>
+        <style>{`
+          /* Layout compacto: mantém o visual original e aproxima os blocos. */
+          .presentation .masthead-inner { padding-top: 12px; padding-bottom: 12px; }
+          .presentation .report-masthead .logo-box img { max-height: 76px; object-fit: contain; }
+          .presentation main#relatorio { padding-top: 12px; }
+          .presentation .cycle-row { margin-bottom: 10px; }
+          .presentation .metrics.metrics-wide { gap: 10px; margin-bottom: 12px; }
+          .presentation .metrics.metrics-wide .metric { padding: 12px 14px; }
+          .presentation .metrics.metrics-wide .metric-value { line-height: 1.1; }
+          .presentation .metrics.metrics-wide .metric p { margin-top: 5px; }
+          .presentation .report-controls { margin-top: 10px; margin-bottom: 10px; }
+          .presentation .store-grid { gap: 10px; }
+          .presentation .store-column { gap: 10px; }
+          .presentation .store-heading { padding-top: 10px; padding-bottom: 10px; }
+          .presentation .store-panel table th,
+          .presentation .store-panel table td { padding-top: 7px; padding-bottom: 7px; }
+          .presentation .pagination { margin-top: 10px; }
+          @media (max-width: 760px) {
+            .presentation .metrics.metrics-wide { gap: 8px; }
+            .presentation .store-grid { gap: 8px; }
           }
         `}</style>
         <section className="metrics metrics-wide" aria-label="Resumo da previsão">{metrics.map(({ label, note, value, icon: Icon }) => <article className="metric" key={label}><div className="metric-label">{label}<Icon size={17} aria-hidden="true" /></div><strong className="metric-value">{loading && !rows.length ? '…' : value}</strong><p>{note}</p></article>)}</section>
