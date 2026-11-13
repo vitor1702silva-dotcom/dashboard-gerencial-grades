@@ -73,6 +73,7 @@ const num = (value: string | number | null | undefined): number => {
   return Number.isFinite(parsed) ? parsed : 0
 }
 const fmt = (value: number, decimals = 0) => value.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+const fmtAccounting = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const norm = (value: unknown) => String(value ?? '').trim()
 
 function StoreTable({ group, search, size, page }: { group: Group; search: string; size: number; page: number }) {
@@ -88,11 +89,11 @@ function StoreTable({ group, search, size, page }: { group: Group; search: strin
       <div className="table-scroll" tabIndex={0} role="region" aria-label={`Tabela ${group.name}`}>
         <table>
           <caption className="sr-only">Previsão por loja · {group.name}</caption>
-          <thead><tr><th scope="col">Loja</th><th scope="col">Registros</th><th scope="col">Reposição</th><th scope="col">Peso kg</th><th scope="col">Total</th></tr></thead>
+          <thead><tr><th scope="col">Loja</th><th scope="col">Itens</th><th scope="col">Peso kg</th><th scope="col">Valor</th></tr></thead>
           <tbody>{visible.length ? visible.map(store => (
-            <tr key={store.name}><th scope="row">{store.name}</th><td>{fmt(store.records)}</td><td>{fmt(store.replenishment, 2)}</td><td>{fmt(store.weight, 2)}</td><td>{fmt(store.total, 2)}</td></tr>
-          )) : <tr><td colSpan={5} className="empty-cell"><Building2 size={25} strokeWidth={1.4} aria-hidden="true" /><strong>Nenhuma loja encontrada</strong><span>Altere a pesquisa para ver outros resultados.</span></td></tr>}</tbody>
-          <tfoot><tr><th scope="row">Total</th><td>{fmt(totals.records)}</td><td>{fmt(totals.replenishment, 2)}</td><td>{fmt(totals.weight, 2)}</td><td>{fmt(totals.total, 2)}</td></tr></tfoot>
+            <tr key={store.name}><th scope="row">{store.name}</th><td>{fmt(store.records)}</td><td>{fmt(store.weight, 2)}</td><td>{fmtAccounting(store.total)}</td></tr>
+          )) : <tr><td colSpan={4} className="empty-cell"><Building2 size={25} strokeWidth={1.4} aria-hidden="true" /><strong>Nenhuma loja encontrada</strong><span>Altere a pesquisa para ver outros resultados.</span></td></tr>}</tbody>
+          <tfoot><tr><th scope="row">Total</th><td>{fmt(totals.records)}</td><td>{fmt(totals.weight, 2)}</td><td>{fmtAccounting(totals.total)}</td></tr></tfoot>
         </table>
       </div>
     </section>
@@ -156,8 +157,7 @@ export function Dashboard() {
     { label: 'Lojas', value: fmt(storesCount), note: 'Filiais por bandeira', icon: Building2 },
     { label: 'Itens + 20%', value: fmt(Math.ceil(rows.length * 1.20)), note: 'Total de itens com acréscimo de 20%', icon: FileSpreadsheet },
     { label: 'Peso total', value: fmt(totalWeight, 2), note: 'Peso informado na base · kg', icon: Weight },
-    { label: 'Reposição', value: fmt(totalReplenishment, 2), note: 'Quantidade total de reposição', icon: Package },
-    { label: 'Total geral', value: fmt(totalGeneral, 2), note: 'Soma do total · sem valor monetário', icon: Layers },
+    { label: 'Valor total', value: fmtAccounting(totalGeneral), note: 'Soma dos valores da base · R$', icon: Layers },
   ]
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -176,9 +176,9 @@ export function Dashboard() {
   }
   function logout() { sessionStorage.removeItem('grades_session'); setSession(false); setRows([]); setPassword(''); setError('') }
   function exportCsv() {
-    const lines = [['Bandeira', 'Loja', 'Itens   da base automática', 'Reposição', 'Peso kg', 'Total'],
+    const lines = [['Bandeira', 'Loja', 'Itens', 'Peso kg', 'Valor'],
       ...filteredGroups.flatMap(group => group.stores.filter(store => store.name.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))).map(store => [
-        group.name, store.name, String(store.records), String(store.replenishment).replace('.', ','), String(store.weight).replace('.', ','), String(store.total).replace('.', ','),
+        group.name, store.name, String(store.records), String(store.weight).replace('.', ','), String(store.total).replace('.', ','),
       ]))]
     const escape = (cell: string) => `"${cell.replace(/^[\s]*[=+@\-]/, "'$&").replace(/"/g, '""')}"`
     const csv = '\uFEFF' + lines.map(line => line.map(escape).join(';')).join('\r\n')
@@ -204,7 +204,7 @@ export function Dashboard() {
         <section className="report-controls" aria-label="Controles do relatório"><div><span className="overline">DETALHAMENTO</span><h2>Previsão por bandeira</h2></div><div className="control-actions"><label className="search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Pesquisar loja" placeholder="Pesquisar loja…" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} /></label><button className="export-button" disabled={!rows.length || loading} onClick={exportCsv}><Download size={16} aria-hidden="true" />Exportar relatório</button></div></section>
         <div className="store-grid"><div className="store-column">{filteredGroups.filter((_, index) => index % 2 === 0).map(group => <StoreTable key={group.name} group={group} search={search} size={Number(size)} page={page} />)}</div><div className="store-column">{filteredGroups.filter((_, index) => index % 2 === 1).map(group => <StoreTable key={group.name} group={group} search={search} size={Number(size)} page={page} />)}</div></div>
         <div className="pagination"><span>{fmt(storesCount)} lojas nas bandeiras · Página {page + 1} de {maxPages}</span><div><label>Lojas por página<select value={size} onChange={e => { setSize(e.target.value); setPage(0) }}><option>25</option><option>50</option><option>100</option></select></label><button disabled={page === 0} onClick={() => setPage(p => p - 1)} aria-label="Página anterior"><ChevronLeft size={18} /></button><button disabled={page + 1 >= maxPages} onClick={() => setPage(p => p + 1)} aria-label="Próxima página"><ChevronRight size={18} /></button></div></div>
-        <footer><p>Pesos em kg · Total geral sem interpretação monetária · Dados consultados no Supabase.</p><span>Previsão da geração de grade das lojas</span></footer>
+        <footer><p>Pesos em kg · Valores em reais (R$) · Dados consultados no Supabase.</p><span>Previsão da geração de grade das lojas</span></footer>
       </main>
     </div>
   )
