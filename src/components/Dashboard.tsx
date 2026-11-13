@@ -198,7 +198,18 @@ export function Dashboard() {
       <header className="report-masthead"><div className="masthead-inner"><div className="logo-box"><img src="/images/grupo-mateus.png" alt="Grupo Mateus" width="153" height="102" /></div><div className="masthead-title"><span className="overline">RELATÓRIO GERENCIAL · GERAÇÃO DE GRADES</span><h1>{title}</h1><p>Planejamento de reposição · visão por bandeira e loja</p></div><div className="extraction"><span>ÚLTIMA ATUALIZAÇÃO DA TELA</span><strong>{lastLoaded ? lastLoaded.toLocaleDateString('pt-BR') : '—'}</strong><small>{lastLoaded ? lastLoaded.toLocaleTimeString('pt-BR') : 'Aguardando dados'}</small></div></div></header>
       <main id="relatorio">
         <div className="cycle-row"><div className="cycle"><strong>Base</strong><span>{loading ? 'Carregando…' : 'Última sincronização concluída'}</span></div><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><button className="export-button" onClick={refresh} disabled={loading}><RefreshCw size={16} />Atualizar dados</button><button className="export-button" onClick={logout}><LogOut size={16} />Sair</button></div></div>
-        <section className="metrics" aria-label="Resumo da previsão">{metrics.map(({ label, note, value, icon: Icon }) => <article className="metric" key={label}><div className="metric-label">{label}<Icon size={17} aria-hidden="true" /></div><strong className="metric-value">{loading && !rows.length ? '…' : value}</strong><p>{note}</p></article>)}</section>
+        <style>{`
+          .metrics.metrics-wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr); }
+          .metrics.metrics-wide .metric { min-width: 0; }
+          .metrics.metrics-wide .metric-value { white-space: nowrap; }
+          @media (max-width: 1000px) {
+            .metrics.metrics-wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          }
+          @media (max-width: 560px) {
+            .metrics.metrics-wide { grid-template-columns: minmax(0, 1fr); }
+          }
+        `}</style>
+        <section className="metrics metrics-wide" aria-label="Resumo da previsão">{metrics.map(({ label, note, value, icon: Icon }) => <article className="metric" key={label}><div className="metric-label">{label}<Icon size={17} aria-hidden="true" /></div><strong className="metric-value">{loading && !rows.length ? '…' : value}</strong><p>{note}</p></article>)}</section>
         {error && <div className="data-note" role="alert"><Info size={17} /><p><strong>Não foi possível carregar os dados.</strong> {error}</p></div>}
         {!error && !loading && !rows.length && <div className="data-note" role="note"><Info size={17} /><p>Nenhum registro disponível na última sincronização.</p></div>}
         <section className="report-controls" aria-label="Controles do relatório"><div><span className="overline">DETALHAMENTO</span><h2>Previsão por bandeira</h2></div><div className="control-actions"><label className="search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Pesquisar loja" placeholder="Pesquisar loja…" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} /></label><button className="export-button" disabled={!rows.length || loading} onClick={exportCsv}><Download size={16} aria-hidden="true" />Exportar relatório</button></div></section>
