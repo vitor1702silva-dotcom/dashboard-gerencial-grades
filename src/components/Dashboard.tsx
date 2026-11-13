@@ -154,7 +154,7 @@ export function Dashboard() {
   const maxPages = Math.max(1, ...filteredGroups.map(group => Math.ceil(group.stores.filter(store => store.name.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))).length / Number(size))))
   const metrics = [
     { label: 'Lojas', value: fmt(storesCount), note: 'Filiais por bandeira', icon: Building2 },
-    { label: 'Registros', value: fmt(rows.length), note: 'Linhas da base automática', icon: FileSpreadsheet },
+    { label: 'Itens', value: fmt(rows.length), note: 'Itens da base automática', icon: FileSpreadsheet },
     { label: 'Peso total', value: fmt(totalWeight, 2), note: 'Peso informado na base · kg', icon: Weight },
     { label: 'Reposição', value: fmt(totalReplenishment, 2), note: 'Quantidade total de reposição', icon: Package },
     { label: 'Total geral', value: fmt(totalGeneral, 2), note: 'Soma do total · sem valor monetário', icon: Layers },
@@ -176,7 +176,7 @@ export function Dashboard() {
   }
   function logout() { sessionStorage.removeItem('grades_session'); setSession(false); setRows([]); setPassword(''); setError('') }
   function exportCsv() {
-    const lines = [['Bandeira', 'Loja', 'Registros', 'Reposição', 'Peso kg', 'Total'],
+    const lines = [['Bandeira', 'Loja', 'Itens   da base automática', 'Reposição', 'Peso kg', 'Total'],
       ...filteredGroups.flatMap(group => group.stores.filter(store => store.name.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))).map(store => [
         group.name, store.name, String(store.records), String(store.replenishment).replace('.', ','), String(store.weight).replace('.', ','), String(store.total).replace('.', ','),
       ]))]
