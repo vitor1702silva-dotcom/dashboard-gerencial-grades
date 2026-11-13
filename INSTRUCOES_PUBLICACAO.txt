@@ -1,0 +1,18 @@
+DASHBOARD GERENCIAL - CODIGO-FONTE COM INTEGRACAO SUPABASE
+
+Este ZIP contem codigo-fonte React/TanStack Start (NAO e um ZIP pronto para arrastar no Netlify Drop).
+
+Para publicar:
+1. Crie um repositorio PRIVADO no GitHub e envie o conteudo deste ZIP.
+2. No Netlify, conecte o repositorio em Add new project > Import an existing project.
+3. Configure o build: comando 'npm run build'; diretorio 'dist/client'.
+4. Teste a publicacao e o login com o usuario do Supabase.
+5. Mantenha o site atual sem alteracoes ate validar o novo deploy.
+
+IMPORTANTE: nao coloque a chave secreta/service_role no repositorio nem no navegador.
+O projeto usa apenas a chave publica e a autenticacao Supabase.
+Os dados sao consultados em paginas de 1000 registros, com agregacoes no navegador.
+Para bases acima de 100 mil registros, recomenda-se mover agregacoes para o servidor/banco.
+
+ATENCAO: nao foi possivel executar a instalacao de dependencias e o build neste ambiente.
+Teste antes de substituir o site de producao.
