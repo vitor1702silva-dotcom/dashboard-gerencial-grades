@@ -1,12 +1,12 @@
-# Dashboard Gerencial — Geração de Grades
+# Previsão da geração de grade das lojas
 
 Interface responsiva em português brasileiro para acompanhamento de reposição, estoques e distribuição. Desenvolvida com React 19, TypeScript, TanStack Start, CSS e Lucide, com adaptação para publicação no Netlify.
 
 ## Escopo atual
 
-Conforme solicitado após esclarecimento, esta entrega contém **somente a interface, sem conexão**. Não há dados fictícios, consultas, autenticação, armazenamento ou exportação de dados reais. Nenhuma alteração foi feita no banco existente. Os traços nos indicadores representam informação indisponível, não zero. Os gráficos apresentam estados vazios, sem séries simuladas.
+Conforme solicitado após esclarecimento, esta entrega contém **somente a interface, sem conexão**. Não há dados fictícios, consultas, autenticação, armazenamento ou exportação de dados reais. Nenhuma alteração foi feita no banco existente. Os traços nos indicadores representam informação indisponível, não zero. As tabelas por bandeira apresentam estados vazios, sem registros simulados. A apresentação segue a referência fornecida: cabeçalho azul-marinho com detalhe vermelho, marca do Grupo Mateus, cinco indicadores e tabelas em duas colunas. Os códigos e nomes das bandeiras foram usados como estrutura visual da referência; não representam agrupamentos consultados na base. A marca foi recortada da imagem fornecida e está em `public/images/grupo-mateus.png`.
 
-Funcionam a navegação entre áreas, abertura dos detalhes e ajuda, alternância de agrupamentos, recolhimento de filtros, edição da pesquisa, limpeza e seleção de tamanho de página. Filtros dependentes de registros, paginação e CSV permanecem indisponíveis até a integração. Atualizar dados informa que a integração está pendente; não realiza requisições.
+A pesquisa e a seleção do tamanho de página funcionam somente como estado da interface, sem persistência ou consulta. Paginação e exportação permanecem indisponíveis até a integração. Não há login ou requisições à base. O layout se adapta a telas pequenas, com rolagem horizontal das tabelas, controles semânticos, estados de foco e suporte a movimento reduzido.
 
 ## Desenvolvimento local
 
