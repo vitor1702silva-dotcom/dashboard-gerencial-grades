@@ -376,27 +376,36 @@ export function Dashboard() {
             .presentation .store-grid { gap: 8px; }
           }
         `}</style>
-        <section className="metrics metrics-wide" aria-label="Resumo da previsão">{metrics.map(({ label, note, value, icon: Icon }) => <article className="metric" key={label}><div className="metric-label">{label}<Icon size={17} aria-hidden="true" /></div><strong className="metric-value">{loading && !rows.length ? '…' : value}</strong><p>{note}</p></article>)}</section>
-        {error && <div className="data-note" role="alert"><Info size={17} /><p><strong>Não foi possível carregar os dados.</strong> {error}</p></div>}
-        {!error && !loading && !rows.length && <div className="data-note" role="note"><Info size={17} /><p>Nenhum registro disponível na última sincronização.</p></div>}
-        <section className="report-controls" aria-label="Controles do relatório"><div><span className="overline">DETALHAMENTO</span><h2>Previsão por bandeira</h2></div><div className="control-actions"><label className="search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Pesquisar loja" placeholder="Pesquisar loja…" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} /></label><button className="export-button" disabled={!rows.length || loading} onClick={exportCsv}><Download size={16} aria-hidden="true" />Exportar relatório</button></div></section>
         <style>{`
-          .presentation .store-grid.cidades-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
-          .presentation .cidade-chart .cidade-bars { display: grid; gap: 14px; padding: 20px 18px; }
-          .presentation .cidade-bar-row { display: grid; grid-template-columns: 78px minmax(0, 1fr) 55px; gap: 10px; align-items: center; font-size: 13px; }
-          .presentation .cidade-bar-label { font-weight: 700; color: #18314f; white-space: nowrap; }
-          .presentation .cidade-bar-track { height: 15px; background: #e9eef5; border-radius: 6px; overflow: hidden; }
-          .presentation .cidade-bar-fill { height: 100%; background: #164b82; border-radius: 6px; }
-          .presentation .cidade-bar-row strong { text-align: right; font-variant-numeric: tabular-nums; }
-          @media (max-width: 760px) { .presentation .store-grid.cidades-layout { grid-template-columns: minmax(0, 1fr); } }
+          .presentation .dashboard-overview { display:grid; grid-template-columns: 0.9fr 1.1fr; gap:12px; align-items:stretch; }
+          .presentation .dashboard-overview .metrics.metrics-wide { display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:10px; margin:0; }
+          .presentation .dashboard-overview .metric { min-height:104px; }
+          .presentation .dashboard-overview .cidade-charts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; min-width:0; }
+          .presentation .dashboard-overview .cidade-chart { min-width:0; }
+          .presentation .dashboard-overview .cidade-chart .cidade-bars { display:grid; gap:13px; padding:20px 12px; }
+          .presentation .dashboard-overview .cidade-bar-row { display:grid; grid-template-columns:50px minmax(0,1fr) 44px; gap:7px; align-items:center; font-size:11px; }
+          .presentation .cidade-bar-label { font-weight:700; color:#18314f; white-space:nowrap; }
+          .presentation .cidade-bar-track { height:13px; background:#e9eef5; border-radius:5px; overflow:hidden; }
+          .presentation .cidade-bar-fill { height:100%; background:#164b82; border-radius:5px; }
+          .presentation .cidade-bar-row strong { text-align:right; font-variant-numeric:tabular-nums; }
+          .presentation .dashboard-stores { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:start; }
+          @media (max-width:1050px) { .presentation .dashboard-overview { grid-template-columns:1fr; } }
+          @media (max-width:760px) { .presentation .dashboard-overview .cidade-charts, .presentation .dashboard-stores { grid-template-columns:1fr; } }
         `}</style>
-        <div className="store-grid cidades-layout">
-          <div className="store-column">{filteredGroups.map(group => <StoreTable key={group.name} group={group} search={search} size={Number(size)} page={page} />)}</div>
-          <div className="store-column">
+        <div className="dashboard-overview">
+          <section className="metrics metrics-wide" aria-label="Resumo da previsão">{metrics.map(({ label, note, value, icon: Icon }) => <article className="metric" key={label}><div className="metric-label">{label}<Icon size={17} aria-hidden="true" /></div><strong className="metric-value">{loading && !rows.length ? '…' : value}</strong><p>{note}</p></article>)}</section>
+          <div className="cidade-charts">
             <CidadeGrafico titulo="Itens por Cidade" dados={cidades} campo="itens" />
             <CidadeGrafico titulo="Excesso Separador por Cidade" dados={cidades} campo="excesso_separador" />
-            {cidadeError && <div className="data-note" role="alert"><Info size={17} /><p>{cidadeError}</p></div>}
           </div>
+        </div>
+        {error && <div className="data-note" role="alert"><Info size={17} /><p><strong>Não foi possível carregar os dados.</strong> {error}</p></div>}
+        {!error && !loading && !rows.length && <div className="data-note" role="note"><Info size={17} /><p>Nenhum registro disponível na última sincronização.</p></div>}
+        {cidadeError && <div className="data-note" role="alert"><Info size={17} /><p>{cidadeError}</p></div>}
+        <section className="report-controls" aria-label="Controles do relatório"><div><span className="overline">DETALHAMENTO</span><h2>Previsão por bandeira</h2></div><div className="control-actions"><label className="search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Pesquisar loja" placeholder="Pesquisar loja…" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} /></label><button className="export-button" disabled={!rows.length || loading} onClick={exportCsv}><Download size={16} aria-hidden="true" />Exportar relatório</button></div></section>
+        <div className="dashboard-stores">
+          <div className="store-column">{filteredGroups.filter(group => group.name !== 'SUPER').map(group => <StoreTable key={group.name} group={group} search={search} size={Number(size)} page={page} />)}</div>
+          <div className="store-column">{filteredGroups.filter(group => group.name === 'SUPER').map(group => <StoreTable key={group.name} group={group} search={search} size={Number(size)} page={page} />)}</div>
         </div>
         <div className="pagination"><span>{fmt(storesCount)} lojas nas bandeiras · Página {page + 1} de {maxPages}</span><div><label>Lojas por página<select value={size} onChange={e => { setSize(e.target.value); setPage(0) }}><option>25</option><option>50</option><option>100</option></select></label><button disabled={page === 0} onClick={() => setPage(p => p - 1)} aria-label="Página anterior"><ChevronLeft size={18} /></button><button disabled={page + 1 >= maxPages} onClick={() => setPage(p => p + 1)} aria-label="Próxima página"><ChevronRight size={18} /></button></div></div>
         <footer><p>Pesos em kg · Valores em reais (R$) · Dados consultados no Supabase.</p><span>Previsão da geração de grade das lojas</span></footer>
