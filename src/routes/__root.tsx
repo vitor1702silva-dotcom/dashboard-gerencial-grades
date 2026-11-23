@@ -2,9 +2,9 @@ import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
 
 import '../styles.css'
 
-const siteName = 'Dashboard Gerencial — Geração de Grades'
+const siteName = 'Previsão da geração de grade das lojas'
 const siteDescription =
-  'Acompanhe a geração de grades, reposição de produtos, estoques e distribuição para filiais em um único painel gerencial.'
+  'Apresentação gerencial da previsão de geração de grades das lojas, organizada por bandeira. Interface sem conexão, com indicadores indisponíveis.'
 
 export const Route = createRootRoute({
   head: () => ({
