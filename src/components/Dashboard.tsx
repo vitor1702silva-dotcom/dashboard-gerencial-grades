@@ -53,6 +53,27 @@ async function token(): Promise<string> {
   saveSession(await response.json() as Session)
   return storedSession()!.access_token
 }
+type CidadeIndicador = { setor: string; itens: number; excesso_separador: number }
+async function fetchCidades(): Promise<CidadeIndicador[]> {
+  const access = await token()
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/indicadores_cidade?select=setor,itens,excesso_separador&order=setor.asc`, {
+    headers: { apikey: KEY, Authorization: `Bearer ${access}` },
+  })
+  if (!response.ok) throw new Error(`Falha ao carregar indicadores por cidade (${response.status}).`)
+  return await response.json() as CidadeIndicador[]
+}
+function CidadeGrafico({ titulo, dados, campo }: { titulo: string; dados: CidadeIndicador[]; campo: 'itens' | 'excesso_separador' }) {
+  const max = Math.max(1, ...dados.map(item => Number(item[campo]) || 0))
+  return <section className="store-panel cidade-chart" aria-label={titulo}>
+    <header className="store-heading"><h2>{titulo}</h2><span>{dados.length} cidades</span></header>
+    <div className="cidade-bars">{dados.map(item => <div className="cidade-bar-row" key={item.setor}>
+      <span className="cidade-bar-label">{item.setor}</span>
+      <div className="cidade-bar-track"><div className="cidade-bar-fill" style={{ width: `${Math.max(0, (Number(item[campo]) || 0) / max * 100)}%` }} /></div>
+      <strong>{fmt(Number(item[campo]) || 0)}</strong>
+    </div>)}</div>
+  </section>
+}
+
 async function fetchAllRows(): Promise<RowData[]> {
   const access = await token()
   const result: RowData[] = []
@@ -155,6 +176,8 @@ export function Dashboard() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [rows, setRows] = useState<RowData[]>([])
+  const [cidades, setCidades] = useState<CidadeIndicador[]>([])
+  const [cidadeError, setCidadeError] = useState('')
   const [search, setSearch] = useState('')
   const [size, setSize] = useState('25')
   const [page, setPage] = useState(0)
@@ -171,6 +194,8 @@ export function Dashboard() {
     }).catch(err => {
       if (active) { setError(err instanceof Error ? err.message : 'Erro ao carregar dados.'); if (!storedSession()) setSession(false) }
     }).finally(() => { if (active) setLoading(false) })
+    fetchCidades().then(data => { if (active) { setCidades(data); setCidadeError('') } })
+      .catch(err => { if (active) setCidadeError(err instanceof Error ? err.message : 'Indicadores indisponíveis.') })
     return () => { active = false }
   }, [session])
 
@@ -219,10 +244,13 @@ export function Dashboard() {
   async function refresh() {
     setLoading(true); setError('')
     try { setRows(await fetchAllRows()); setLastLoaded(new Date()); setPage(0) }
+
     catch (err) { setError(err instanceof Error ? err.message : 'Erro ao atualizar.'); if (!storedSession()) setSession(false) }
     finally { setLoading(false) }
+    try { setCidades(await fetchCidades()); setCidadeError('') }
+    catch (err) { setCidadeError(err instanceof Error ? err.message : 'Indicadores indisponíveis.') }
   }
-  function logout() { sessionStorage.removeItem('grades_session'); setSession(false); setRows([]); setPassword(''); setError('') }
+  function logout() { sessionStorage.removeItem('grades_session'); setSession(false); setRows([]); setCidades([]); setPassword(''); setError('') }
   function exportCsv() {
     const lines = [['Bandeira', 'Loja', 'Itens', 'Peso kg', 'Valor'],
       ...filteredGroups.flatMap(group => group.stores.filter(store => store.name.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))).map(store => [
@@ -352,7 +380,24 @@ export function Dashboard() {
         {error && <div className="data-note" role="alert"><Info size={17} /><p><strong>Não foi possível carregar os dados.</strong> {error}</p></div>}
         {!error && !loading && !rows.length && <div className="data-note" role="note"><Info size={17} /><p>Nenhum registro disponível na última sincronização.</p></div>}
         <section className="report-controls" aria-label="Controles do relatório"><div><span className="overline">DETALHAMENTO</span><h2>Previsão por bandeira</h2></div><div className="control-actions"><label className="search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Pesquisar loja" placeholder="Pesquisar loja…" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} /></label><button className="export-button" disabled={!rows.length || loading} onClick={exportCsv}><Download size={16} aria-hidden="true" />Exportar relatório</button></div></section>
-        <div className="store-grid"><div className="store-column">{filteredGroups.filter((_, index) => index % 2 === 0).map(group => <StoreTable key={group.name} group={group} search={search} size={Number(size)} page={page} />)}</div><div className="store-column">{filteredGroups.filter((_, index) => index % 2 === 1).map(group => <StoreTable key={group.name} group={group} search={search} size={Number(size)} page={page} />)}</div></div>
+        <style>{`
+          .presentation .store-grid.cidades-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+          .presentation .cidade-chart .cidade-bars { display: grid; gap: 14px; padding: 20px 18px; }
+          .presentation .cidade-bar-row { display: grid; grid-template-columns: 78px minmax(0, 1fr) 55px; gap: 10px; align-items: center; font-size: 13px; }
+          .presentation .cidade-bar-label { font-weight: 700; color: #18314f; }
+          .presentation .cidade-bar-track { height: 15px; background: #e9eef5; border-radius: 6px; overflow: hidden; }
+          .presentation .cidade-bar-fill { height: 100%; background: #164b82; border-radius: 6px; }
+          .presentation .cidade-bar-row strong { text-align: right; font-variant-numeric: tabular-nums; }
+          @media (max-width: 760px) { .presentation .store-grid.cidades-layout { grid-template-columns: minmax(0, 1fr); } }
+        `}</style>
+        <div className="store-grid cidades-layout">
+          <div className="store-column">{filteredGroups.map(group => <StoreTable key={group.name} group={group} search={search} size={Number(size)} page={page} />)}</div>
+          <div className="store-column">
+            <CidadeGrafico titulo="Itens por Cidade" dados={cidades} campo="itens" />
+            <CidadeGrafico titulo="Excesso Separador por Cidade" dados={cidades} campo="excesso_separador" />
+            {cidadeError && <div className="data-note" role="alert"><Info size={17} /><p>{cidadeError}</p></div>}
+          </div>
+        </div>
         <div className="pagination"><span>{fmt(storesCount)} lojas nas bandeiras · Página {page + 1} de {maxPages}</span><div><label>Lojas por página<select value={size} onChange={e => { setSize(e.target.value); setPage(0) }}><option>25</option><option>50</option><option>100</option></select></label><button disabled={page === 0} onClick={() => setPage(p => p - 1)} aria-label="Página anterior"><ChevronLeft size={18} /></button><button disabled={page + 1 >= maxPages} onClick={() => setPage(p => p + 1)} aria-label="Próxima página"><ChevronRight size={18} /></button></div></div>
         <footer><p>Pesos em kg · Valores em reais (R$) · Dados consultados no Supabase.</p><span>Previsão da geração de grade das lojas</span></footer>
       </main>
