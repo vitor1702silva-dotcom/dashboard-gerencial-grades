@@ -383,8 +383,8 @@ export function Dashboard() {
         <style>{`
           .presentation .store-grid.cidades-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
           .presentation .cidade-chart .cidade-bars { display: grid; gap: 14px; padding: 20px 18px; }
-          .presentation .cidade-bar-row { display: grid; grid-template-columns: 94px minmax(0, 1fr) 55px; gap: 8px; align-items: center; font-size: 13px; }
-          .presentation .cidade-bar-label { font-weight: 700; color: #18314f; white-space: nowrap; font-size: 12px; }
+          .presentation .cidade-bar-row { display: grid; grid-template-columns: 78px minmax(0, 1fr) 55px; gap: 10px; align-items: center; font-size: 13px; }
+          .presentation .cidade-bar-label { font-weight: 700; color: #18314f; white-space: nowrap; }
           .presentation .cidade-bar-track { height: 15px; background: #e9eef5; border-radius: 6px; overflow: hidden; }
           .presentation .cidade-bar-fill { height: 100%; background: #164b82; border-radius: 6px; }
           .presentation .cidade-bar-row strong { text-align: right; font-variant-numeric: tabular-nums; }
