@@ -1,819 +1,312 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
-import {
-  Activity,
-  ArrowDownToLine,
-  ArrowUpRight,
-  BarChart3,
-  Boxes,
-  Building2,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  CircleHelp,
-  Database,
-  FileSpreadsheet,
-  Filter,
-  LayoutDashboard,
-  ListFilter,
-  Menu,
-  Package,
-  RefreshCw,
-  Search,
-  Settings2,
-  ShieldCheck,
-  SlidersHorizontal,
-  Truck,
-  Weight,
-  X,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import type { FormEvent } from 'react'
+import { Building2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Info, Search, Weight, Package, Layers, RefreshCw, LogOut } from 'lucide-react'
 
-type Page =
-  'Visão geral' | 'Reposição' | 'Estoques' | 'Distribuição' | 'Relatórios'
-const navigation: { label: Page; icon: LucideIcon }[] = [
-  { label: 'Visão geral', icon: LayoutDashboard },
-  { label: 'Reposição', icon: RefreshCw },
-  { label: 'Estoques', icon: Boxes },
-  { label: 'Distribuição', icon: Truck },
-  { label: 'Relatórios', icon: FileSpreadsheet },
-]
-const metrics: { label: string; icon: LucideIcon; note: string }[] = [
-  {
-    label: 'Total de registros',
-    icon: FileSpreadsheet,
-    note: 'Registros da base automática',
-  },
-  {
-    label: 'Quantidade de reposição',
-    icon: Package,
-    note: 'Soma das quantidades de reposição',
-  },
-  { label: 'Peso total', icon: Weight, note: 'Soma do peso informado na base' },
-  {
-    label: 'Total geral',
-    icon: BarChart3,
-    note: 'Soma da coluna total da planilha',
-  },
-  {
-    label: 'Filiais atendidas',
-    icon: Building2,
-    note: 'Filiais de destino distintas',
-  },
-  { label: 'Produtos', icon: Boxes, note: 'Produtos distintos na base' },
-  {
-    label: 'Estoque CD',
-    icon: Package,
-    note: 'Estoque do centro de distribuição',
-  },
-  { label: 'Estoque filial', icon: Building2, note: 'Estoque nas filiais' },
-]
-const columns = [
-  'ID',
-  'Filial destino',
-  'Departamento',
-  'Seção',
-  'Produto',
-  'Qtd. reposição',
-  'Peso',
-  'Total',
-  'Estoque CD',
-  'Estoque filial',
-  'Cidade',
-  'Região',
-]
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ypgytczcrufdnhybsrle.supabase.co'
+const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+const title = 'Previsão da geração de grade das lojas'
 
-const URL = 'https://ypgytczcrufdnhybsrle.supabase.co'
-const KEY = 'sb_publishable_TqV-mUEueoidbDi5WN7irQ_LCRqRLHq'
-type RowData = Record<string, string | number | null>
-const fieldMap: Record<string,string> = {
-  'Filial destino':'filial_destino', 'Departamento':'depto', 'Seção':'secao',
-  'Produto':'produto', 'Cidade':'cidade', 'Região':'regiao'
+type RowData = {
+  id?: number
+  filial_destino?: string | number | null
+  bandeira?: string | null
+  qtd_reposicao?: string | number | null
+  peso?: string | number | null
+  total?: string | number | null
+  importado_em?: string | null
 }
-const displayFields = ['id','filial_destino','depto','secao','produto','qtd_reposicao','peso','total','estoque_cd','estoque_filial','cidade','regiao']
-const numeric = (v: unknown) => Number(v || 0) || 0
-const formatted = (v: number) => v.toLocaleString('pt-BR',{maximumFractionDigits:2})
-const safe = (v: unknown) => String(v ?? '')
-function getSession(): {access_token:string;refresh_token:string;expires_at:number}|null {
-  try { return JSON.parse(sessionStorage.getItem('grades_session') || 'null') } catch { return null }
+type Session = { access_token: string; refresh_token: string; expires_at?: number; expires_in?: number }
+type Store = { name: string; records: number; replenishment: number; weight: number; total: number }
+type Group = { name: string; stores: Store[]; records: number; replenishment: number; weight: number; total: number }
+
+function storedSession(): Session | null {
+  try { return JSON.parse(sessionStorage.getItem('grades_session') || 'null') as Session | null }
+  catch { return null }
 }
-async function signIn(email:string,password:string) {
-  const res=await fetch(`${URL}/auth/v1/token?grant_type=password`,{
-    method:'POST',headers:{'apikey':KEY,'Content-Type':'application/json'},
-    body:JSON.stringify({email,password})
+function saveSession(value: Session) {
+  sessionStorage.setItem('grades_session', JSON.stringify({
+    ...value, expires_at: value.expires_at || Math.floor(Date.now() / 1000) + (value.expires_in || 3600),
+  }))
+}
+async function signIn(email: string, password: string): Promise<void> {
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST', headers: { apikey: KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
   })
-  const body=await res.json()
-  if(!res.ok) throw new Error(body.msg || body.error_description || 'Não foi possível entrar')
-  sessionStorage.setItem('grades_session',JSON.stringify(body))
-  return body
+  if (!response.ok) throw new Error('Não foi possível entrar. Confira o e-mail e a senha.')
+  saveSession(await response.json() as Session)
 }
 async function token(): Promise<string> {
-  const session=getSession()
-  if(!session) throw new Error('Entre com seu e-mail e senha')
-  if(session.expires_at && session.expires_at * 1000 > Date.now()+60000) return session.access_token
-  const res=await fetch(`${URL}/auth/v1/token?grant_type=refresh_token`,{
-    method:'POST',headers:{'apikey':KEY,'Content-Type':'application/json'},
-    body:JSON.stringify({refresh_token:session.refresh_token})
+  const session = storedSession()
+  if (!session) throw new Error('Entre com seu e-mail e senha.')
+  if ((session.expires_at || 0) * 1000 > Date.now() + 60000) return session.access_token
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+    method: 'POST', headers: { apikey: KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: session.refresh_token }),
   })
-  if(!res.ok) { sessionStorage.removeItem('grades_session'); throw new Error('Sessão expirada. Entre novamente.') }
-  const body=await res.json()
-  sessionStorage.setItem('grades_session',JSON.stringify(body))
-  return body.access_token
-}
-async function fetchAllRows():Promise<RowData[]> {
-  const access=await token()
-  const result:RowData[]=[]
-  for(let offset=0;offset<250000;offset+=1000) {
-    const res=await fetch(`${URL}/rest/v1/dashboard_base_automatica?select=*&order=id.asc&offset=${offset}&limit=1000`,{
-      headers:{'apikey':KEY,'Authorization':`Bearer ${access}`}
-    })
-    if(!res.ok) throw new Error(`Consulta falhou (${res.status}): ${await res.text()}`)
-    const part=await res.json() as RowData[]
-    result.push(...part)
-    if(part.length<1000) return result
+  if (!response.ok) {
+    sessionStorage.removeItem('grades_session')
+    throw new Error('Sua sessão expirou. Entre novamente.')
   }
-  throw new Error('Limite de segurança da consulta atingido')
+  saveSession(await response.json() as Session)
+  return storedSession()!.access_token
 }
-function sumBy(rows:RowData[],field:string,measure:string) {
-  const m=new Map<string,number>()
-  rows.forEach(r=>{const k=safe(r[field]) || 'Não informado';m.set(k,(m.get(k)||0)+numeric(r[measure]))})
-  return [...m.entries()].sort((a,b)=>b[1]-a[1])
+async function fetchAllRows(): Promise<RowData[]> {
+  const access = await token()
+  const result: RowData[] = []
+  for (let offset = 0; offset < 250000; offset += 1000) {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/dashboard_base_automatica?select=id,filial_destino,bandeira,qtd_reposicao,peso,total,importado_em&order=id.asc&offset=${offset}&limit=1000`, {
+      headers: { apikey: KEY, Authorization: `Bearer ${access}` },
+    })
+    if (!response.ok) throw new Error(`Falha ao consultar os dados (${response.status}). Verifique as permissões no Supabase.`)
+    const batch = await response.json() as RowData[]
+    result.push(...batch)
+    if (batch.length < 1000) return result
+  }
+  throw new Error('A consulta excedeu o limite de segurança de 250 mil registros.')
 }
+const num = (value: string | number | null | undefined): number => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  if (!value) return 0
+  const clean = String(value).trim()
+  const parsed = Number(clean.includes(',') ? clean.replace(/\./g, '').replace(',', '.') : clean)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+const fmt = (value: number, decimals = 0) => value.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+const fmtAccounting = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const norm = (value: unknown) => String(value ?? '').trim()
+
+function StoreTable({ group, search, size, page }: { group: Group; search: string; size: number; page: number }) {
+  const matches = group.stores.filter(store => store.name.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')))
+  const visible = matches.slice(page * size, (page + 1) * size)
+  const totals = matches.reduce((acc, store) => ({
+    records: acc.records + store.records, replenishment: acc.replenishment + store.replenishment,
+    weight: acc.weight + store.weight, total: acc.total + store.total,
+  }), { records: 0, replenishment: 0, weight: 0, total: 0 })
+  return (
+    <section className="store-panel" aria-label={`Lojas da bandeira ${group.name}`}>
+      <header className="store-heading"><h2>{group.name}</h2><span>{matches.length} {matches.length === 1 ? 'loja' : 'lojas'}</span></header>
+      <div className="table-scroll" tabIndex={0} role="region" aria-label={`Tabela ${group.name}`}>
+        <table>
+          <caption className="sr-only">Previsão por loja · {group.name}</caption>
+          <thead><tr><th scope="col">Loja</th><th scope="col">Itens</th><th scope="col">Peso kg</th><th scope="col">Valor</th></tr></thead>
+          <tbody>{visible.length ? visible.map(store => (
+            <tr key={store.name}><th scope="row">{store.name}</th><td>{fmt(store.records)}</td><td>{fmt(store.weight, 2)}</td><td>{fmtAccounting(store.total)}</td></tr>
+          )) : <tr><td colSpan={4} className="empty-cell"><Building2 size={25} strokeWidth={1.4} aria-hidden="true" /><strong>Nenhuma loja encontrada</strong><span>Altere a pesquisa para ver outros resultados.</span></td></tr>}</tbody>
+          <tfoot><tr><th scope="row">Total</th><td>{fmt(totals.records)}</td><td>{fmt(totals.weight, 2)}</td><td>{fmtAccounting(totals.total)}</td></tr></tfoot>
+        </table>
+      </div>
+    </section>
+  )
+}
+
 export function Dashboard() {
-  const [page, setPage] = useState<Page>('Visão geral')
-  const [menu, setMenu] = useState(false)
-  const [dialog, setDialog] = useState<'connection' | 'help' | null>(null)
-  const [search, setSearch] = useState('')
-  const [size, setSize] = useState('25')
-  const [group, setGroup] = useState('Departamento')
-  const [geo, setGeo] = useState('Região')
-  const [filters, setFilters] = useState(true)
-  const [notice, setNotice] = useState('')
-  const [session, setSession] = useState(!!getSession())
+  const [session, setSession] = useState(() => !!storedSession())
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [authError, setAuthError] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [loggingIn, setLoggingIn] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [dataError, setDataError] = useState('')
+  const [error, setError] = useState('')
   const [rows, setRows] = useState<RowData[]>([])
-  const [selected, setSelected] = useState<Record<string,string>>({})
-  const [currentPage, setCurrentPage] = useState(0)
-  const [loadedAt, setLoadedAt] = useState('')
-  async function refresh() {
-    setLoading(true);setDataError('')
-    try { const data=await fetchAllRows();setRows(data);setLoadedAt(new Date().toLocaleString('pt-BR'));setNotice(`${formatted(data.length)} registros consultados com sucesso.`) }
-    catch(e) {setDataError(e instanceof Error?e.message:'Erro de conexão')}
-    finally {setLoading(false)}
-  }
-  useEffect(()=>{if(session) void refresh()},[session])
-  const filtered=useMemo(()=>rows.filter(r=>Object.entries(selected).every(([field,value])=>!value || safe(r[field])===value)),[rows,selected])
-  const searched=useMemo(()=>filtered.filter(r=>!search || [r.produto,r.filial_destino,r.depto,r.secao,r.cidade,r.regiao,r.id].some(v=>safe(v).toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')))),[filtered,search])
-  const pageSize=Number(size)
-  const pages=Math.max(1,Math.ceil(searched.length/pageSize))
-  const visibleRows=searched.slice(Math.min(currentPage,pages-1)*pageSize,(Math.min(currentPage,pages-1)+1)*pageSize)
-  const values=[filtered.length, ...['qtd_reposicao','peso','total'].map(f=>filtered.reduce((a,r)=>a+numeric(r[f]),0)),new Set(filtered.map(r=>r.filial_destino).filter(Boolean)).size,new Set(filtered.map(r=>r.produto).filter(Boolean)).size,...['estoque_cd','estoque_filial'].map(f=>filtered.reduce((a,r)=>a+numeric(r[f]),0))]
-  function exportCSV(){
-    const content=[displayFields.join(';'),...searched.map(r=>displayFields.map(f=>'"'+safe(r[f]).replaceAll('"','""')+'"').join(';'))].join('\r\n')
-    const blob=new Blob(['\ufeff'+content],{type:'text/csv;charset=utf-8'})
-    const href=window.URL.createObjectURL(blob)
-    const a=document.createElement('a');a.href=href;a.download='relatorio_grades.csv';a.click();window.URL.revokeObjectURL(href)
-  }
-  function signOut(){sessionStorage.removeItem('grades_session');setSession(false);setRows([])}
+  const [search, setSearch] = useState('')
+  const [size, setSize] = useState('25')
+  const [page, setPage] = useState(0)
+  const [presentationMode, setPresentationMode] = useState(false)
+  const [lastLoaded, setLastLoaded] = useState<Date | null>(null)
 
-  function navigate(next: Page) {
-    setPage(next)
-    setMenu(false)
-    setSearch('')
-    setNotice('')
+  useEffect(() => {
+    if (!session) return
+    let active = true
+    setLoading(true)
+    setError('')
+    fetchAllRows().then(data => {
+      if (active) { setRows(data); setLastLoaded(new Date()) }
+    }).catch(err => {
+      if (active) { setError(err instanceof Error ? err.message : 'Erro ao carregar dados.'); if (!storedSession()) setSession(false) }
+    }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [session])
+
+  const groups = useMemo<Group[]>(() => {
+    const map = new Map<string, Map<string, Store>>()
+    for (const row of rows) {
+      const banner = norm(row.bandeira) || 'SEM BANDEIRA'
+      const storeName = norm(row.filial_destino) || 'SEM FILIAL'
+      if (!map.has(banner)) map.set(banner, new Map())
+      const stores = map.get(banner)!
+      if (!stores.has(storeName)) stores.set(storeName, { name: storeName, records: 0, replenishment: 0, weight: 0, total: 0 })
+      const store = stores.get(storeName)!
+      store.records++
+      store.replenishment += num(row.qtd_reposicao)
+      store.weight += num(row.peso)
+      store.total += num(row.total)
+    }
+    return [...map.entries()].map(([name, stores]) => {
+      const values = [...stores.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true }))
+      return { name, stores: values, records: values.reduce((sum, s) => sum + s.records, 0),
+        replenishment: values.reduce((sum, s) => sum + s.replenishment, 0),
+        weight: values.reduce((sum, s) => sum + s.weight, 0), total: values.reduce((sum, s) => sum + s.total, 0) }
+    }).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+  }, [rows])
+  const filteredGroups = groups.filter(group => group.stores.some(store => store.name.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))))
+  const storesCount = groups.reduce((sum, group) => sum + group.stores.length, 0)
+  const totalWeight = groups.reduce((sum, group) => sum + group.weight, 0)
+  const totalReplenishment = groups.reduce((sum, group) => sum + group.replenishment, 0)
+  const totalGeneral = groups.reduce((sum, group) => sum + group.total, 0)
+  const maxPages = Math.max(1, ...filteredGroups.map(group => Math.ceil(group.stores.filter(store => store.name.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))).length / Number(size))))
+  const metrics = [
+    { label: 'Lojas', value: fmt(storesCount), note: 'Filiais por bandeira', icon: Building2 },
+    { label: 'Itens + 20%', value: fmt(Math.ceil(rows.length * 1.20)), note: 'Total de itens com acréscimo de 20%', icon: FileSpreadsheet },
+    { label: 'Peso total', value: fmt(totalWeight, 2), note: 'Peso informado na base · kg', icon: Weight },
+    { label: 'Valor total', value: fmtAccounting(totalGeneral), note: 'Soma dos valores da base · R$', icon: Layers },
+  ]
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setLoggingIn(true)
+    setError('')
+    try { await signIn(email.trim(), password); setPassword(''); setSession(true) }
+    catch (err) { setError(err instanceof Error ? err.message : 'Falha ao entrar.') }
+    finally { setLoggingIn(false) }
   }
-  const showCharts = page !== 'Relatórios'
+  async function refresh() {
+    setLoading(true); setError('')
+    try { setRows(await fetchAllRows()); setLastLoaded(new Date()); setPage(0) }
+    catch (err) { setError(err instanceof Error ? err.message : 'Erro ao atualizar.'); if (!storedSession()) setSession(false) }
+    finally { setLoading(false) }
+  }
+  function logout() { sessionStorage.removeItem('grades_session'); setSession(false); setRows([]); setPassword(''); setError('') }
+  function exportCsv() {
+    const lines = [['Bandeira', 'Loja', 'Itens', 'Peso kg', 'Valor'],
+      ...filteredGroups.flatMap(group => group.stores.filter(store => store.name.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))).map(store => [
+        group.name, store.name, String(store.records), String(store.weight).replace('.', ','), String(store.total).replace('.', ','),
+      ]))]
+    const escape = (cell: string) => `"${cell.replace(/^[\s]*[=+@\-]/, "'$&").replace(/"/g, '""')}"`
+    const csv = '\uFEFF' + lines.map(line => line.map(escape).join(';')).join('\r\n')
+    const url = globalThis.URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
+    const a = document.createElement('a'); a.href = url; a.download = 'previsao_geracao_grades.csv'; a.click(); globalThis.URL.revokeObjectURL(url)
+  }
+
   if (!session) return (
-    <div className="app-shell" style={{display:'grid',placeItems:'center',minHeight:'100vh'}}>
-      <form className="filter-panel" style={{width:'min(430px,92vw)',padding:30}} onSubmit={async e=>{e.preventDefault();setBusy(true);setAuthError('');try{await signIn(email,password);setSession(true)}catch(err){setAuthError(err instanceof Error?err.message:'Falha no login')}finally{setBusy(false)}}}>
-        <h1 style={{fontSize:25,marginBottom:8}}>Dashboard Gerencial</h1>
-        <p>Entre com o usuário cadastrado no Supabase.</p>
-        <label style={{display:'block',marginTop:22}}>E-mail<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} style={{display:'block',width:'100%',padding:12,marginTop:7,border:'1px solid #cbd5e1',borderRadius:7}} /></label>
-        <label style={{display:'block',marginTop:15}}>Senha<input required type="password" value={password} onChange={e=>setPassword(e.target.value)} style={{display:'block',width:'100%',padding:12,marginTop:7,border:'1px solid #cbd5e1',borderRadius:7}} /></label>
-        {authError && <p style={{color:'#b42318'}}>{authError}</p>}
-        <button disabled={busy} className="button primary" type="submit" style={{marginTop:20,width:'100%',justifyContent:'center'}}>{busy?'Entrando...':'Entrar'}</button>
-      </form>
+    <div className="presentation">
+      <header className="report-masthead"><div className="masthead-inner"><div className="logo-box"><img src="/images/grupo-mateus.png" alt="Grupo Mateus" width="153" height="102" /></div><div className="masthead-title"><span className="overline">RELATÓRIO GERENCIAL · GERAÇÃO DE GRADES</span><h1>{title}</h1><p>Acesso autorizado · Supabase</p></div></div></header>
+      <main id="relatorio"><section className="store-panel" style={{ maxWidth: 460, margin: '48px auto', padding: 28 }}><h2>Acessar relatório</h2><form onSubmit={handleLogin} style={{ display: 'grid', gap: 14, marginTop: 18 }}><label>E-mail<input style={{ display: 'block', width: '100%', padding: 12, marginTop: 6 }} type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} /></label><label>Senha<input style={{ display: 'block', width: '100%', padding: 12, marginTop: 6 }} type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></label><button className="export-button" type="submit" disabled={loggingIn}>{loggingIn ? 'Entrando…' : 'Entrar'}</button></form>{error && <p role="alert" style={{ color: '#b91c1c', marginTop: 14 }}>{error}</p>}</section></main>
     </div>
   )
-  return (
-    <div className="app-shell">
-      {menu && (
-        <button
-          className="sidebar-scrim"
-          aria-label="Fechar menu"
-          onClick={() => setMenu(false)}
-        />
-      )}
-      <aside className={`sidebar ${menu ? 'is-open' : ''}`}>
-        <a
-          href="#main"
-          className="brand"
-          onClick={() => navigate('Visão geral')}
-        >
-          <span className="brand-mark">
-            <BarChart3 size={24} />
-          </span>
-          <span>
-            Dashboard<span className="brand-sub">GERENCIAL</span>
-          </span>
-        </a>
-        <div className="workspace">
-          <span className="workspace-icon">
-            <Boxes size={19} />
-          </span>
-          <div>
-            Geração de Grades<small>Painel de gestão</small>
-          </div>
-          <ChevronDown size={15} />
-        </div>
-        <div className="nav-label">PRINCIPAL</div>
-        <nav aria-label="Navegação principal">
-          {navigation.map(({ label, icon: Icon }) => (
-            <button
-              key={label}
-              onClick={() => navigate(label)}
-              className={page === label ? 'nav-item active' : 'nav-item'}
-              aria-current={page === label ? 'page' : undefined}
-            >
-              <Icon size={19} />
-              {label}
-              {page === label && <span className="nav-dot" />}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="connection-card">
-            <span className="connection-symbol">
-              <Database size={19} />
-            </span>
-            <strong>Sua gestão, conectada.</strong>
-            <p>Todos os dados da operação em um só lugar.</p>
-            <button onClick={() => setDialog('connection')}>
-              Ver conexão <ArrowUpRight size={15} />
-            </button>
-          </div>
-          <button className="nav-item" onClick={() => setDialog('connection')}>
-            <Settings2 size={19} />
-            Configurações
-          </button>
-          <button className="nav-item" onClick={() => setDialog('help')}>
-            <CircleHelp size={19} />
-            Central de ajuda
-          </button>
-          <div className="sidebar-footer">
-            <ShieldCheck size={15} /> Ambiente de gestão
-          </div>
-        </div>
-      </aside>
-      <div className="main-shell">
-        <header className="topbar">
-          <div className="breadcrumb">
-            <button
-              className="icon-button mobile-menu"
-              aria-label="Abrir menu"
-              onClick={() => setMenu(true)}
-            >
-              <Menu size={21} />
-            </button>
-            <span>Gerencial</span>
-            <ChevronRight size={14} />
-            <strong>{page}</strong>
-          </div>
-          <div className="top-actions">
-            <span className="environment">
-              <span />
-              Conectado ao Supabase
-            </span>
-            <span className="top-divider" />
-            <button
-              className="icon-button"
-              aria-label="Ajuda"
-              onClick={() => setDialog('help')}
-            >
-              <CircleHelp size={19} />
-            </button>
-            <button className="text-button" onClick={signOut}>Sair</button>
-            <button
-              className="avatar"
-              aria-label="Informações de acesso"
-              onClick={() => setDialog('connection')}
-            >
-              GG
-            </button>
-          </div>
+  if (presentationMode) return (
+    <div className="grades-summary-view">
+      <style>{`
+        .grades-summary-view { min-height: 100vh; padding: 12px 12px 22px; background: #e9eef5; box-sizing: border-box; color: #122f53; }
+        .grades-summary-view * { box-sizing: border-box; }
+        .grades-summary-toolbar { max-width: 1500px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font: 600 13px Arial,sans-serif; }
+        .grades-summary-toolbar button { border: 0; border-radius: 7px; background: #12335e; color: #fff; padding: 9px 16px; font: inherit; cursor: pointer; }
+        .grades-summary-slide { width: min(96vw, 160vh); max-width: 1500px; aspect-ratio: 16 / 9; margin: 0 auto; overflow: hidden; display: flex; flex-direction: column; background: #f3f6fb; border: 1px solid #d5deeb; box-shadow: 0 5px 20px #142e4c16; container-type: inline-size; font-family: Arial,Helvetica,sans-serif; }
+        .grades-summary-head { height: 18%; flex-shrink: 0; display: flex; align-items: center; gap: 2.2cqw; padding: 1.4cqw 3cqw; background: #112e55; border-bottom: .48cqw solid #d82d43; color: #fff; }
+        .grades-summary-head img { width: 10cqw; height: 6.5cqw; object-fit: contain; background: #fff; border-radius: .6cqw; padding: .35cqw; }
+        .grades-summary-head h1 { margin: .35cqw 0; color: #fff; font-size: 2.25cqw; line-height: 1.15; }
+        .grades-summary-head p { margin: 0; color: #d4e0f0; font-size: 1.15cqw; }
+        .grades-summary-eyebrow { font-size: .92cqw; color: #c0d1e7; letter-spacing: .12em; font-weight: 700; }
+        .grades-summary-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 2cqw 2.6cqw 1.3cqw; gap: 1.7cqw; }
+        .grades-summary-kpis { display: grid; grid-template-columns: .8fr 1fr 1.15fr 1.65fr; gap: 1.2cqw; }
+        .grades-summary-kpi { background: #fff; border: 1px solid #d6e0ec; border-radius: .85cqw; padding: 1.4cqw; min-width: 0; }
+        .grades-summary-kpi span { display: block; font-size: 1.12cqw; color: #526b89; margin-bottom: .65cqw; }
+        .grades-summary-kpi strong { color: #102f58; font-size: 2.25cqw; white-space: nowrap; letter-spacing: -.04em; }
+        .grades-summary-kpi:last-child strong { font-size: 1.95cqw; }
+        .grades-summary-section { display: flex; justify-content: space-between; align-items: baseline; }
+        .grades-summary-section h2 { margin: 0; font-size: 1.8cqw; color: #102f58; }
+        .grades-summary-section span { font-size: 1.1cqw; color: #647993; }
+        .grades-summary-table-wrap { background: #fff; border: 1px solid #d6e0ec; border-radius: .85cqw; overflow: hidden; flex: 1; min-height: 0; }
+        .grades-summary-table { border-collapse: collapse; width: 100%; height: 100%; table-layout: fixed; font-size: 1.28cqw; }
+        .grades-summary-table th,.grades-summary-table td { padding: 1.1cqw 1.3cqw; border-bottom: 1px solid #e5ebf3; }
+        .grades-summary-table thead { background: #e8eef6; color: #3b5574; }
+        .grades-summary-table th { text-align: left; }
+        .grades-summary-table th:not(:first-child),.grades-summary-table td:not(:first-child) { text-align: right; white-space: nowrap; }
+        .grades-summary-table tbody tr:nth-child(even) { background: #f7f9fc; }
+        .grades-summary-table tbody td:first-child { font-weight: 700; }
+        .grades-summary-table tfoot { background: #112e55; color: #fff; font-weight: 700; }
+        .grades-summary-table tfoot td { border-bottom: 0; }
+        .grades-summary-foot { flex-shrink: 0; padding: .95cqw 2.6cqw; display: flex; justify-content: space-between; background: #e1eaf4; font-size: 1.03cqw; color: #526b89; }
+        @media print { @page { size: landscape; margin: 0; } .grades-summary-toolbar { display: none !important; } .grades-summary-view { padding: 0; background: white; } .grades-summary-slide { width: 100vw; border: 0; box-shadow: none; } }
+      `}</style>
+      <div className="grades-summary-toolbar">
+        <span>Resumo gerencial · 16:9 · um único print</span>
+        <button type="button" onClick={() => setPresentationMode(false)}>Voltar ao dashboard</button>
+      </div>
+      <div className="grades-summary-slide" aria-label="Resumo gerencial para apresentação 16 por 9">
+        <header className="grades-summary-head">
+          <img src="/images/grupo-mateus.png" alt="Grupo Mateus" />
+          <div><div className="grades-summary-eyebrow">RELATÓRIO GERENCIAL · GERAÇÃO DE GRADES</div><h1>{title}</h1><p>Resumo consolidado por bandeira · Centro de Distribuição</p></div>
         </header>
-        <main id="main">
-          <div className="page-heading">
-            <div>
-              <div className="eyebrow">INTELIGÊNCIA OPERACIONAL</div>
-              <h1>{page === 'Visão geral' ? 'Geração de Grades' : page}</h1>
-              <p>
-                {page === 'Visão geral'
-                  ? 'Uma visão completa da reposição, dos estoques e da sua distribuição.'
-                  : page === 'Relatórios'
-                    ? 'Consulte os detalhes da base automática e acompanhe sua operação.'
-                    : page === 'Estoques'
-                      ? 'Acompanhe a disponibilidade no centro de distribuição e nas filiais.'
-                      : page === 'Distribuição'
-                        ? 'Explore a distribuição de produtos por região e cidade.'
-                        : 'Acompanhe as necessidades de reposição por filial e produto.'}
-              </p>
-            </div>
-            <button
-              className="button primary"
-              onClick={() => void refresh()} disabled={loading}
-            >
-              <RefreshCw size={16} />
-              Atualizar dados
-            </button>
+        <div className="grades-summary-body">
+          <div className="grades-summary-kpis">
+            <div className="grades-summary-kpi"><span>Lojas</span><strong>{fmt(storesCount)}</strong></div>
+            <div className="grades-summary-kpi"><span>Itens + 20%</span><strong>{fmt(Math.ceil(rows.length * 1.20))}</strong></div>
+            <div className="grades-summary-kpi"><span>Peso total · kg</span><strong>{fmt(totalWeight, 2)}</strong></div>
+            <div className="grades-summary-kpi"><span>Valor total</span><strong>{fmtAccounting(totalGeneral)}</strong></div>
           </div>
-          <div className="status-banner">
-            <span className="status-icon">
-              <Database size={19} />
-            </span>
-            <div>
-              <strong>{dataError ? 'Falha ao consultar dados' : loading ? 'Carregando registros...' : 'Dados conectados ao Supabase'}</strong>
-              <p>
-                {dataError || (loading ? 'Consultando a base em lotes de 1.000 registros.' : `Última consulta: ${loadedAt || 'aguardando'}. ${formatted(rows.length)} registros carregados.`)}
-              </p>
-            </div>
-            <button onClick={() => setDialog('connection')}>
-              Detalhes da conexão <ArrowUpRight size={15} />
-            </button>
+          <div className="grades-summary-section"><h2>Consolidado por bandeira</h2><span>{groups.length} bandeiras · {storesCount} lojas</span></div>
+          <div className="grades-summary-table-wrap">
+            <table className="grades-summary-table">
+              <colgroup><col style={{width:'27%'}}/><col style={{width:'11%'}}/><col style={{width:'13%'}}/><col style={{width:'21%'}}/><col style={{width:'28%'}}/></colgroup>
+              <thead><tr><th scope="col">Bandeira</th><th scope="col">Lojas</th><th scope="col">Itens (base)</th><th scope="col">Peso kg</th><th scope="col">Valor</th></tr></thead>
+              <tbody>{groups.map(group => <tr key={group.name}><td>{group.name}</td><td>{fmt(group.stores.length)}</td><td>{fmt(group.records)}</td><td>{fmt(group.weight,2)}</td><td>{fmtAccounting(group.total)}</td></tr>)}</tbody>
+              <tfoot><tr><td>Total geral</td><td>{fmt(storesCount)}</td><td>{fmt(rows.length)}</td><td>{fmt(totalWeight,2)}</td><td>{fmtAccounting(totalGeneral)}</td></tr></tfoot>
+            </table>
           </div>
-          <section className="filter-panel" aria-label="Filtros do relatório">
-            <div className="section-top">
-              <h2>
-                <SlidersHorizontal size={17} />
-                Filtros <span className="subtle-pill">Toda a base</span>
-              </h2>
-              <button
-                className="text-button"
-                onClick={() => setFilters(!filters)}
-              >
-                {filters ? 'Recolher' : 'Exibir filtros'}
-                <ChevronDown size={14} className={!filters ? 'rotate' : ''} />
-              </button>
-            </div>
-            {filters && (
-              <>
-                <div className="filters">
-                  {[
-                    'Filial destino',
-                    'Departamento',
-                    'Seção',
-                    'Produto',
-                    'Cidade',
-                    'Região',
-                  ].map((label) => (
-                    <label key={label}>
-                      {label}
-                      <div className="select-wrap">
-                        <select aria-label={label} value={selected[fieldMap[label]] || ''} onChange={e=>{setSelected(p=>({...p,[fieldMap[label]]:e.target.value}));setCurrentPage(0)}}>
-                          <option>
-                            {label === 'Filial destino'
-                              ? 'Todas as filiais'
-                              : label === 'Departamento'
-                                ? 'Todos os departamentos'
-                                : label === 'Seção'
-                                  ? 'Todas as seções'
-                                  : label === 'Produto'
-                                    ? 'Todos os produtos'
-                                    : label === 'Cidade'
-                                      ? 'Todas as cidades'
-                                      : 'Todas as regiões'}
-                          </option>
-                          {[...new Set(rows.map(r=>safe(r[fieldMap[label]])).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')).map(value=><option key={value} value={value}>{value}</option>)}
-                        </select>
-                        <ChevronDown size={13} />
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                <div className="filter-foot">
-                  <span>
-                    <Filter size={13} /> {formatted(filtered.length)} registros correspondem aos filtros.
-                  </span>
-                  <button
-                    className="text-button"
-                    onClick={() => {
-                      setSearch('')
-                      setSelected({})
-                      setCurrentPage(0)
-                      setNotice('Filtros e pesquisa limpos.')
-                    }}
-                  >
-                    Limpar filtros
-                  </button>
-                </div>
-              </>
-            )}
-          </section>
-          {notice && (
-            <div className="notice" role="status">
-              <Check size={15} />
-              {notice}
-              <button
-                aria-label="Dispensar aviso"
-                onClick={() => setNotice('')}
-              >
-                <X size={15} />
-              </button>
-            </div>
-          )}
-          {page !== 'Relatórios' && (
-            <>
-              <div className="section-caption">
-                <h2>Resumo da operação</h2>
-                <span>
-                  <span className="tiny-dot" /> {loadedAt || "Aguardando atualização"}
-                </span>
-              </div>
-              <section className="metrics" aria-label="Indicadores principais">
-                {metrics
-                  .filter(
-                    (_, i) =>
-                      page !== 'Estoques' || [0, 4, 5, 6, 7].includes(i),
-                  )
-                  .map(({ label, icon: Icon, note }) => (
-                    <article className="metric" key={label}>
-                      <div className="metric-top">
-                        <span>{label}</span>
-                        <Icon size={18} />
-                      </div>
-                      <div className="metric-value">
-                        {formatted(values[metrics.findIndex(m=>m.label===label)])}<span>{loading ? 'Atualizando' : 'Dados reais'}</span>
-                      </div>
-                      <p>{note}</p>
-                    </article>
-                  ))}
-              </section>
-            </>
-          )}
-          {showCharts && (
-            <section className="charts-grid" aria-label="Gráficos gerenciais">
-              {(page === 'Visão geral' || page === 'Reposição') && (
-                <>
-                  <Chart
-                    title="Reposição por filial" data={sumBy(filtered,'filial_destino','qtd_reposicao')}
-                    subtitle="Quantidade de reposição por filial de destino"
-                    wide
-                  />
-                  <Chart
-                    title="Reposição por departamento" data={sumBy(filtered,group==='Departamento'?'depto':'secao','qtd_reposicao')}
-                    subtitle="Composição das necessidades de reposição"
-                    control={
-                      <div className="segmented">
-                        {['Departamento', 'Seção'].map((g) => (
-                          <button
-                            key={g}
-                            className={g === group ? 'selected' : ''}
-                            onClick={() => setGroup(g)}
-                          >
-                            {g}
-                          </button>
-                        ))}
-                      </div>
-                    }
-                    type="ring"
-                    description={`Sem dados por ${group.toLowerCase()}`}
-                  />
-                </>
-              )}
-              {(page === 'Visão geral' || page === 'Distribuição') && (
-                <Chart
-                  title="Distribuição geográfica" data={sumBy(filtered,geo==='Região'?'regiao':'cidade','qtd_reposicao')}
-                  subtitle="Reposição por localização de destino"
-                  control={
-                    <div className="segmented">
-                      {['Região', 'Cidade'].map((g) => (
-                        <button
-                          key={g}
-                          className={g === geo ? 'selected' : ''}
-                          onClick={() => setGeo(g)}
-                        >
-                          {g}
-                        </button>
-                      ))}
-                    </div>
-                  }
-                  description={`Sem dados por ${geo.toLowerCase()}`}
-                />
-              )}{' '}
-              {(page === 'Visão geral' || page === 'Estoques') && (
-                <Chart
-                  title="Comparativo de estoques" data={[["Estoque CD",values[6]],["Estoque filial",values[7]]]}
-                  subtitle="Disponibilidade no CD e nas filiais"
-                  legend
-                />
-              )}
-              {page === 'Reposição' && (
-                <Chart
-                  title="Produtos com maior reposição" data={sumBy(filtered,'produto','qtd_reposicao')}
-                  subtitle="Ordenação por quantidade de reposição"
-                  wide
-                />
-              )}
-            </section>
-          )}
-          <section className="report-panel">
-            <div className="report-heading">
-              <div>
-                <h2>
-                  <FileSpreadsheet size={18} />
-                  {page === 'Relatórios'
-                    ? 'Relatório detalhado'
-                    : 'Detalhamento da base'}
-                </h2>
-                <p>Consulte os registros de geração de grades.</p>
-              </div>
-              <button
-                className="button secondary"
-                onClick={exportCSV}
-                disabled={!searched.length}
-                title="Exportar os registros filtrados"
-              >
-                <ArrowDownToLine size={16} />
-                Exportar CSV
-              </button>
-            </div>
-            <div className="table-toolbar">
-              <label className="search">
-                <Search size={17} />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Pesquisar produto, filial ou registro..."
-                  aria-label="Pesquisar registros"
-                />
-                {search && (
-                  <button
-                    onClick={() => setSearch('')}
-                    aria-label="Limpar pesquisa"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </label>
-              <span className="table-tag">
-                <ListFilter size={14} /> Base automática
-              </span>
-            </div>
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    {columns.map((c) => (
-                      <th key={c}>
-                        {c}
-                        <ChevronDown size={11} />
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-              {visibleRows.length > 0 ? <tbody>{visibleRows.map((r,i)=><tr key={`${r.id}-${i}`}>{displayFields.map(f=><td key={f} style={{padding:'12px 10px',borderBottom:'1px solid #e5e7eb',whiteSpace:'nowrap'}}>{['qtd_reposicao','peso','total','estoque_cd','estoque_filial'].includes(f)?formatted(numeric(r[f])):safe(r[f])}</td>)}</tr>)}</tbody> : null}
-              </table>
-              {visibleRows.length === 0 && <div className="table-empty">
-                <span className="empty-icon">
-                  <FileSpreadsheet size={25} />
-                </span>
-                <h3>
-                  {search
-                    ? 'Nenhum resultado para a pesquisa'
-                    : 'Nenhum registro disponível'}
-                </h3>
-                <p>
-                  {search
-                    ? 'Altere os termos pesquisados ou os filtros.'
-                    : 'Verifique sua conexão e os filtros selecionados.'}
-                </p>
-                <button
-                  className="text-button"
-                  onClick={() => setDialog('connection')}
-                >
-                  Ver detalhes da integração <ArrowUpRight size={14} />
-                </button>
-              </div>}
-            </div>
-            <div className="pagination">
-              <span>{formatted(searched.length)} registros encontrados</span>
-              <div>
-                <label>
-                  Linhas por página{' '}
-                  <select
-                    value={size}
-                    onChange={(e) => {setSize(e.target.value);setCurrentPage(0)}}
-                    aria-label="Linhas por página"
-                  >
-                    <option>25</option>
-                    <option>50</option>
-                    <option>100</option>
-                  </select>
-                </label>
-                <span>{Math.min(currentPage,pages-1)+1} de {pages}</span>
-                <button
-                  className="icon-button"
-                  disabled={currentPage===0}
-                  onClick={()=>setCurrentPage(p=>Math.max(0,p-1))}
-                  aria-label="Página anterior"
-                >
-                  <ChevronLeft size={17} />
-                </button>
-                <button
-                  className="icon-button"
-                  disabled={currentPage>=pages-1}
-                  onClick={()=>setCurrentPage(p=>Math.min(pages-1,p+1))}
-                  aria-label="Próxima página"
-                >
-                  <ChevronRight size={17} />
-                </button>
-              </div>
-            </div>
-          </section>
-          <footer className="page-footer">
-            <span>
-              Dashboard Gerencial <span className="footer-dot">·</span> Geração
-              de Grades
-            </span>
-            <span>
-              <ShieldCheck size={13} /> Acesso autenticado via Supabase
-            </span>
-          </footer>
-        </main>
-      </div>
-      {dialog && (
-        <div className="modal-backdrop" onClick={() => setDialog(null)}>
-          <section
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="modal-title"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') setDialog(null)
-              if (e.key === 'Tab') {
-                const nodes =
-                  e.currentTarget.querySelectorAll<HTMLButtonElement>(
-                    'button:not([disabled])',
-                  )
-                const first = nodes[0]
-                const last = nodes[nodes.length - 1]
-                if (e.shiftKey && document.activeElement === first) {
-                  e.preventDefault()
-                  last?.focus()
-                } else if (!e.shiftKey && document.activeElement === last) {
-                  e.preventDefault()
-                  first?.focus()
-                }
-              }
-            }}
-          >
-            <button
-              autoFocus
-              className="modal-close icon-button"
-              aria-label="Fechar"
-              onClick={() => setDialog(null)}
-            >
-              <X size={20} />
-            </button>
-            <span className="modal-icon">
-              {dialog === 'connection' ? (
-                <Database size={25} />
-              ) : (
-                <CircleHelp size={25} />
-              )}
-            </span>
-            <div className="eyebrow">
-              {dialog === 'connection'
-                ? 'INTEGRAÇÃO ATIVA'
-                : 'CENTRAL DE AJUDA'}
-            </div>
-            <h2 id="modal-title">
-              {dialog === 'connection'
-                ? 'Sua base, no centro da gestão.'
-                : 'Sobre este painel'}
-            </h2>
-            {dialog === 'connection' ? (
-              <>
-                <p>
-                  A aplicação consulta a view existente com a sessão autenticada do Supabase. Nenhum dado é alterado.
-                </p>
-                <dl>
-                  <dt>Origem prevista</dt>
-                  <dd>Supabase · BaseAutomatica</dd>
-                  <dt>View existente</dt>
-                  <dd>
-                    <code>dashboard_base_automatica</code>
-                  </dd>
-                  <dt>Identificador</dt>
-                  <dd>
-                    <code>id</code> · bigint
-                  </dd>
-                  <dt>Acesso</dt>
-                  <dd>Login Supabase e permissões de leitura habilitados</dd>
-                </dl>
-                <div className="modal-note">
-                  <ShieldCheck size={19} />
-                  <span>
-                    A conexão utiliza a chave pública e o token do usuário autenticado. Não insira credenciais secretas nesta interface.
-                  </span>
-                </div>
-              </>
-            ) : (
-              <>
-                <p>
-                  Use o menu para explorar os indicadores, estoques,
-                  distribuição e o detalhamento da base.
-                </p>
-                <dl>
-                  <dt>Indicadores sem valores</dt>
-                  <dd>O traço indica informação indisponível, não zero.</dd>
-                  <dt>Total geral</dt>
-                  <dd>Soma da coluna total, sem interpretação monetária.</dd>
-                  <dt>Relatórios completos</dt>
-                  <dd>
-                    A integração futura precisa paginar todos os registros e
-                    agregar a base completa, sem corte em 1.000 linhas.
-                  </dd>
-                </dl>
-              </>
-            )}
-            <button
-              className="button primary modal-done"
-              onClick={() => setDialog(null)}
-            >
-              Entendi
-              <Check size={16} />
-            </button>
-          </section>
         </div>
-      )}
+        <footer className="grades-summary-foot"><span>Fonte: Supabase · Itens do quadro por bandeira sem acréscimo · Valores em R$</span><span>{lastLoaded ? `Consultado em ${lastLoaded.toLocaleString('pt-BR')}` : 'Aguardando atualização'}</span></footer>
+      </div>
     </div>
   )
-}
-function Chart({
-  title,
-  subtitle,
-  control,
-  type,
-  wide,
-  legend,
-  description,
-  data = [],
-}: {
-  title: string
-  subtitle: string
-  control?: ReactNode
-  type?: 'ring'
-  wide?: boolean
-  legend?: boolean
-  description?: string
-  data?: (string | number)[][]
-}) {
+
   return (
-    <article className={`chart-card ${wide ? 'chart-wide' : ''}`}>
-      <div className="chart-heading">
-        <div>
-          <h2>{title}</h2>
-          <p>{subtitle}</p>
-        </div>
-        {control || (
-          <span className="chart-menu">
-            <BarChart3 size={17} />
-          </span>
-        )}
-      </div>
-      {legend && (
-        <div className="legend">
-          <span>
-            <i />
-            Estoque CD
-          </span>
-          <span>
-            <i />
-            Estoque filial
-          </span>
-        </div>
-      )}
-      <div style={{padding:'12px 22px',minHeight:180}}>
-        {data.length ? data.slice(0,10).map(([label,value],i)=>{
-          const max=Math.max(1,...data.map(([,v])=>numeric(v)))
-          return <div key={`${label}-${i}`} style={{marginBottom:10}}>
-            <div style={{display:'flex',justifyContent:'space-between',gap:12,fontSize:12}}><span>{safe(label)}</span><strong>{formatted(numeric(value))}</strong></div>
-            <div style={{background:'#edf2f9',height:9,borderRadius:6,marginTop:5}}><div style={{width:`${100*numeric(value)/max}%`,background:'#2862d8',height:'100%',borderRadius:6}} /></div>
-          </div>
-        }) : <p style={{textAlign:'center',padding:35,color:'#667085'}}>Sem registros disponíveis</p>}
-      </div>
-      <div className="chart-bottom">
-        <span>Fonte: base automática</span>
-        <span>{data.length} categorias</span>
-      </div>
-    </article>
+    <div className="presentation">
+      <a className="skip-link" href="#relatorio">Pular para o relatório</a>
+      <header className="report-masthead"><div className="masthead-inner"><div className="logo-box"><img src="/images/grupo-mateus.png" alt="Grupo Mateus" width="153" height="102" /></div><div className="masthead-title"><span className="overline">RELATÓRIO GERENCIAL · GERAÇÃO DE GRADES</span><h1>{title}</h1><p>Planejamento de reposição · visão por bandeira e loja</p></div><div className="extraction"><span>ÚLTIMA ATUALIZAÇÃO DA TELA</span><strong>{lastLoaded ? lastLoaded.toLocaleDateString('pt-BR') : '—'}</strong><small>{lastLoaded ? lastLoaded.toLocaleTimeString('pt-BR') : 'Aguardando dados'}</small></div></div></header>
+      <main id="relatorio">
+        <div className="cycle-row"><div className="cycle"><strong>Base</strong><span>{loading ? 'Carregando…' : 'Última sincronização concluída'}</span></div><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><button className="export-button" onClick={() => setPresentationMode(true)} disabled={loading || !rows.length}>Resumo 16:9 para print</button><button className="export-button" onClick={refresh} disabled={loading}><RefreshCw size={16} />Atualizar dados</button><button className="export-button" onClick={logout}><LogOut size={16} />Sair</button></div></div>
+        <style>{`
+          .metrics.metrics-wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr); }
+          .metrics.metrics-wide .metric { min-width: 0; }
+          .metrics.metrics-wide .metric-value { white-space: nowrap; }
+          .metrics.metrics-wide .metric:last-child .metric-value { font-size: clamp(1.25rem, 2.1vw, 1.85rem); letter-spacing: -0.035em; }
+          @media (max-width: 1000px) {
+            .metrics.metrics-wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          }
+          @media (max-width: 560px) {
+            .metrics.metrics-wide { grid-template-columns: minmax(0, 1fr); }
+          }
+        `}</style>
+        <style>{`
+          /* Layout compacto: mantém o visual original e aproxima os blocos. */
+          .presentation .masthead-inner { padding-top: 12px; padding-bottom: 12px; }
+          .presentation .report-masthead .logo-box img { max-height: 76px; object-fit: contain; }
+          .presentation main#relatorio { padding-top: 12px; }
+          .presentation .cycle-row { margin-bottom: 10px; }
+          .presentation .metrics.metrics-wide { gap: 10px; margin-bottom: 12px; }
+          .presentation .metrics.metrics-wide .metric { padding: 12px 14px; }
+          .presentation .metrics.metrics-wide .metric-value { line-height: 1.1; }
+          .presentation .metrics.metrics-wide .metric p { margin-top: 5px; }
+          .presentation .report-controls { margin-top: 10px; margin-bottom: 10px; }
+          .presentation .store-grid { gap: 10px; }
+          .presentation .store-column { gap: 10px; }
+          .presentation .store-heading { padding-top: 10px; padding-bottom: 10px; }
+          .presentation .store-panel table th,
+          .presentation .store-panel table td { padding-top: 7px; padding-bottom: 7px; }
+          .presentation .pagination { margin-top: 10px; }
+          @media (max-width: 760px) {
+            .presentation .metrics.metrics-wide { gap: 8px; }
+            .presentation .store-grid { gap: 8px; }
+          }
+        `}</style>
+        <section className="metrics metrics-wide" aria-label="Resumo da previsão">{metrics.map(({ label, note, value, icon: Icon }) => <article className="metric" key={label}><div className="metric-label">{label}<Icon size={17} aria-hidden="true" /></div><strong className="metric-value">{loading && !rows.length ? '…' : value}</strong><p>{note}</p></article>)}</section>
+        {error && <div className="data-note" role="alert"><Info size={17} /><p><strong>Não foi possível carregar os dados.</strong> {error}</p></div>}
+        {!error && !loading && !rows.length && <div className="data-note" role="note"><Info size={17} /><p>Nenhum registro disponível na última sincronização.</p></div>}
+        <section className="report-controls" aria-label="Controles do relatório"><div><span className="overline">DETALHAMENTO</span><h2>Previsão por bandeira</h2></div><div className="control-actions"><label className="search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Pesquisar loja" placeholder="Pesquisar loja…" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} /></label><button className="export-button" disabled={!rows.length || loading} onClick={exportCsv}><Download size={16} aria-hidden="true" />Exportar relatório</button></div></section>
+        <div className="store-grid"><div className="store-column">{filteredGroups.filter((_, index) => index % 2 === 0).map(group => <StoreTable key={group.name} group={group} search={search} size={Number(size)} page={page} />)}</div><div className="store-column">{filteredGroups.filter((_, index) => index % 2 === 1).map(group => <StoreTable key={group.name} group={group} search={search} size={Number(size)} page={page} />)}</div></div>
+        <div className="pagination"><span>{fmt(storesCount)} lojas nas bandeiras · Página {page + 1} de {maxPages}</span><div><label>Lojas por página<select value={size} onChange={e => { setSize(e.target.value); setPage(0) }}><option>25</option><option>50</option><option>100</option></select></label><button disabled={page === 0} onClick={() => setPage(p => p - 1)} aria-label="Página anterior"><ChevronLeft size={18} /></button><button disabled={page + 1 >= maxPages} onClick={() => setPage(p => p + 1)} aria-label="Próxima página"><ChevronRight size={18} /></button></div></div>
+        <footer><p>Pesos em kg · Valores em reais (R$) · Dados consultados no Supabase.</p><span>Previsão da geração de grade das lojas</span></footer>
+      </main>
+    </div>
   )
 }
